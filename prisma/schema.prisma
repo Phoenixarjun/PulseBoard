@@ -1,0 +1,37 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model Outcome {
+  id        String   @id @default(cuid())
+  title     String
+  status    String   @default("active") // "active", "completed", "planning"
+  priority  String?  // "high", "normal", "low"
+  impact    String?
+  tag       String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model PulseLog {
+  id        String   @id @default(cuid())
+  energy    Int
+  momentum  Int
+  note      String?
+  createdAt DateTime @default(now())
+}
+
+model FocusSession {
+  id        String   @id @default(cuid())
+  title     String
+  duration  Int      // in minutes
+  type      String   // "focus", "shallow", "distraction"
+  startTime DateTime
+  endTime   DateTime
+  createdAt DateTime @default(now())
+}
