@@ -1,7 +1,96 @@
+'use client';
+
 import { TopOutcomes } from '@/components/dashboard/TopOutcomes';
 import { TrendingUp, CalendarDays, Zap, ArrowUp } from 'lucide-react';
+import { useState, useEffect } from 'react';
+
+interface PulseLog {
+  energy: number;
+  momentum: number;
+}
+
+interface FocusSession {
+  duration: number;
+  type: string;
+}
 
 export default function Home() {
+  const [pulseLog, setPulseLog] = useState<PulseLog | null>(null);
+  const [focusData, setFocusData] = useState<{
+    totalMinutes: number;
+    focusMinutes: number;
+    distractionMinutes: number;
+    sessionsCount: number;
+    distractionsCount: number;
+  }>({ totalMinutes: 0, focusMinutes: 0, distractionMinutes: 0, sessionsCount: 0, distractionsCount: 0 });
+
+  useEffect(() => {
+    async function fetchData() {
+      try {
+        // Fetch Pulse
+        const pulseRes = await fetch('/api/pulse');
+        if (pulseRes.ok) {
+          const logs = await pulseRes.json();
+          if (logs.length > 0) {
+            setPulseLog(logs[0]); // Get latest
+          }
+        }
+
+        // Fetch Focus
+        const focusRes = await fetch('/api/focus');
+        if (focusRes.ok) {
+          const sessions: FocusSession[] = await focusRes.json();
+
+          let fMins = 0;
+          let dMins = 0;
+          let sCount = 0;
+          let dCount = 0;
+
+          sessions.forEach(s => {
+            if (s.type === 'focus') {
+              fMins += s.duration;
+              sCount++;
+            } else if (s.type === 'distraction') {
+              dMins += s.duration;
+              dCount++;
+            }
+          });
+
+          setFocusData({
+            totalMinutes: fMins + dMins,
+            focusMinutes: fMins,
+            distractionMinutes: dMins,
+            sessionsCount: sCount,
+            distractionsCount: dCount
+          });
+        }
+      } catch (error) {
+        console.error('Error fetching dashboard data:', error);
+      }
+    }
+    fetchData();
+  }, []);
+
+  // Format time (e.g. 252 -> 4h 12m)
+  const formatTime = (minutes: number) => {
+    if (minutes === 0) return '0m';
+    const h = Math.floor(minutes / 60);
+    const m = minutes % 60;
+    return h > 0 ? `${h}h ${m}m` : `${m}m`;
+  };
+
+  const focusPercent = focusData.totalMinutes > 0 ? Math.round((focusData.focusMinutes / focusData.totalMinutes) * 100) : 0;
+  const distractionPercent = focusData.totalMinutes > 0 ? Math.round((focusData.distractionMinutes / focusData.totalMinutes) * 100) : 0;
+
+  // Use real data if available, otherwise fallback to mock design data
+  const displayTotalTime = focusData.totalMinutes > 0 ? formatTime(focusData.totalMinutes) : '4h 12m';
+  const displayFocusPct = focusData.totalMinutes > 0 ? focusPercent : 85;
+  const displayDistPct = focusData.totalMinutes > 0 ? distractionPercent : 15;
+  const displaySessions = focusData.sessionsCount > 0 ? focusData.sessionsCount : 3;
+  const displayDistractions = focusData.distractionsCount > 0 ? focusData.distractionsCount : 12;
+
+  const currentEnergy = pulseLog ? pulseLog.energy : 8;
+
   return (
     <div className="w-full max-w-[1200px] mx-auto p-4 md:p-8 lg:p-10 flex flex-col gap-8">
       {/* Hero Section */}
@@ -25,11 +114,13 @@ export default function Home() {
                 Good Morning, Alex
               </h1>
               <p className="text-slate-300 mt-2 text-base md:text-lg max-w-xl">
-                Focus blocks initiated. You have 3 key outcomes pending for today's sprint.
+                Focus blocks initiated. You have key outcomes pending for today's sprint.
               </p>
             </div>
             <div className="flex flex-col items-end text-right">
-              <div className="text-4xl md:text-5xl font-bold text-white tracking-tighter">09:42</div>
+              <div className="text-4xl md:text-5xl font-bold text-white tracking-tighter">
+                {new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+              </div>
               <div className="text-blue-600 font-medium tracking-wide text-sm uppercase">Deep Work Session</div>
             </div>
           </div>
@@ -82,22 +173,22 @@ export default function Home() {
             <div className="flex flex-col gap-4">
               <div className="flex items-end justify-between text-sm">
                 <span className="text-slate-500">Total Productive Time</span>
-                <span className="text-2xl font-bold text-slate-900 dark:text-white">4h 12m</span>
+                <span className="text-2xl font-bold text-slate-900 dark:text-white">{displayTotalTime}</span>
               </div>
 
               <div className="w-full h-4 bg-slate-100 dark:bg-slate-800 rounded-full overflow-hidden flex">
-                <div className="h-full bg-blue-600" style={{ width: '85%' }}></div>
-                <div className="h-full bg-red-400/80" style={{ width: '15%' }}></div>
+                <div className="h-full bg-blue-600 transition-all duration-1000" style={{ width: `${displayFocusPct}%` }}></div>
+                <div className="h-full bg-red-400/80 transition-all duration-1000" style={{ width: `${displayDistPct}%` }}></div>
               </div>
 
               <div className="flex justify-between items-center text-xs font-medium">
                 <div className="flex items-center gap-2">
                   <div className="w-2 h-2 rounded-full bg-blue-600"></div>
-                  <span className="text-slate-500 dark:text-slate-400">Focus (85%)</span>
+                  <span className="text-slate-500 dark:text-slate-400">Focus ({displayFocusPct}%)</span>
                 </div>
                 <div className="flex items-center gap-2">
                   <div className="w-2 h-2 rounded-full bg-red-400/80"></div>
-                  <span className="text-slate-500 dark:text-slate-400">Distraction (15%)</span>
+                  <span className="text-slate-500 dark:text-slate-400">Distraction ({displayDistPct}%)</span>
                 </div>
               </div>
             </div>
@@ -105,11 +196,11 @@ export default function Home() {
             <div className="pt-4 border-t border-slate-100 dark:border-slate-800 grid grid-cols-2 gap-4">
               <div>
                 <div className="text-xs text-slate-500 mb-1">Deep Work Sessions</div>
-                <div className="text-xl font-bold text-slate-900 dark:text-white">3</div>
+                <div className="text-xl font-bold text-slate-900 dark:text-white">{displaySessions}</div>
               </div>
               <div>
                 <div className="text-xs text-slate-500 mb-1">Context Switches</div>
-                <div className="text-xl font-bold text-slate-900 dark:text-white">12</div>
+                <div className="text-xl font-bold text-slate-900 dark:text-white">{displayDistractions}</div>
               </div>
             </div>
           </div>
@@ -130,8 +221,8 @@ export default function Home() {
               <div className="w-full bg-blue-600/40 rounded-t-sm h-[75%]"></div>
               <div className="w-full bg-blue-600/60 rounded-t-sm h-[85%]"></div>
               <div className="w-full bg-blue-600/80 rounded-t-sm h-[80%]"></div>
-              <div className="w-full bg-blue-600 rounded-t-sm h-[95%] relative group">
-                <div className="absolute -top-8 left-1/2 -translate-x-1/2 bg-white dark:bg-slate-700 text-slate-900 dark:text-white text-xs px-2 py-1 rounded shadow opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap">Current Level</div>
+              <div className="w-full bg-blue-600 rounded-t-sm relative group transition-all duration-1000" style={{ height: `${currentEnergy * 10}%` }}>
+                <div className="absolute -top-8 left-1/2 -translate-x-1/2 bg-white dark:bg-slate-700 text-slate-900 dark:text-white text-xs px-2 py-1 rounded shadow opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap">Level {currentEnergy}</div>
               </div>
             </div>
 
